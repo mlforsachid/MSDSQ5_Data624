@@ -1,0 +1,126 @@
+---
+title: "Data-624 Homework-2"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 02/08/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Homework2)
+
+## ---------------------------------------------------------------------------
+
+
+```{r echo=FALSE, include=FALSE}
+library(ggplot2)
+library(forecast)
+library(fma)
+library(fpp2)
+```
+
+## 3.1 For the following series, find an appropriate Box-Cox transformation in order to stabilise the variance.
+
+* **usnetelec:**
+* **usgdp:**
+* **mcopper:**
+* **enplanements:**
+
+```{r}
+
+math.trans = function(ts, objname)
+{
+  lambda = BoxCox.lambda(ts)
+  print(paste('Lambda value for time series', objname, '=', lambda))
+  print(paste('Plotting Original vs Transformed time series for', objname))
+  
+  df = cbind(Original = ts, Transformed = BoxCox(ts, lambda))
+  
+  autoplot(df, facet = TRUE) +
+    xlab('Time') + ylab('Value') +
+    ggtitle(paste('Original vs Transformed plot for', objname))
+}
+
+math.trans(usnetelec, 'usnetelec')
+math.trans(usgdp, 'usgdp')
+math.trans(mcopper, 'mcopper')
+math.trans(enplanements, 'enplanements')
+
+
+```
+
+## 3.2 Why is a Box-Cox transformation unhelpful for the cangas data?
+
+```{r}
+math.trans(cangas, 'cangas')
+```
+
+#### BoxCox transformation is helpful for a time series where variation in the time series changes with time. BoxCox transformation is used to make those variations uniform over the period of time which helps to better forecasting of a time series. The cangas time series doesn't have these characteristics so BoxCox transformation is not really useful in this case
+
+## 3.3 What Box-Cox transformation would you select for your retail data (from Exercise 3 in Section 2.10)?
+
+```{r}
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+
+myts <- ts(retaildata[,"A3349627V"],
+  frequency=12, start=c(1982,4))
+math.trans(myts, 'retaildata')
+```
+
+#### The original time series of the retail data plotted above has peak variation over the period of time. We can see that original time series exhibits peak changes over the period of time. Transformed time series makes those peak changes uniform. This indicates that BoxCox transformation with the lambda value of -0.0579 is useful in removing peak variation in the original time series and making them uniform over the period of time after applying transformation
+
+## 3.8 For your retail time series (from Exercise 3 in Section 2.10):
+
+### a. Split the data into two parts using:
+
+```{r}
+myts.train <- window(myts, end=c(2010,12))
+myts.test <- window(myts, start=2011)
+```
+
+### b. Check that your data have been split appropriately by producing the following plot.
+
+```{r}
+autoplot(myts) +
+   autolayer(myts.train, series="Train") +
+   autolayer(myts.test, series="Test")
+```
+
+### c. Calculate forecasts using snaive applied to myts.train.
+
+```{r}
+fc <- snaive(myts.train)
+```
+
+### d. Compare the accuracy of your forecasts against the actual values stored in myts.test.
+
+```{r}
+accuracy(fc,myts.test)
+```
+
+### e. Check the residuals.
+
+```{r}
+checkresiduals(fc)
+```
+
+### Do the residuals appear to be uncorrelated and normally distributed?
+
+#### From the ACF plot above residuals are not un-correlated. From the histogram we can see the residuals are normally distributed with long tail on right. However the residuals are not centered around mean indicating bias in the forecast
+
+### f. How sensitive are the accuracy measures to the training/test split?
+
+#### As we can see above time series shows strong seasonality and peaks are increasing over the period of time. If we use original time series (without transformation) for the forecasting then accuracy measures are very sensitive to training and test split. Accuracy will be highly dependent on what part of the time series is used for training and what part is used for testing specially while using seasonal naive method for forecasting. Let's prove this using cross validation technique
+
+
+```{r}
+e = tsCV(myts, snaive, h=1)
+rmse = sqrt(mean(e^2, na.rm=TRUE))
+print(rmse)
+```
+
+#### We can see that root mean square value with cross validation is 12.60 and root mean square value obtained using train test split is 29.39. Huge RMSE difference between cross validation and train test split approach indicates that accuracy measure of the above time series is vary sensitive to training/test split
+
