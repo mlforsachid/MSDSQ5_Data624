@@ -1,0 +1,108 @@
+---
+title: "Data-624 Homework-3"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 02/21/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Homework3)
+
+## ---------------------------------------------------------------------------
+
+
+```{r echo=FALSE, include=FALSE}
+library(fpp2)
+library(seasonal)
+```
+
+## 6.2 The plastics data set consists of the monthly sales (in thousands) of product A for a plastics manufacturer for five years.
+
+
+### a. Plot the time series of sales of product A. Can you identify seasonal fluctuations and/or a trend-cycle
+
+```{r}
+autoplot(plastics) +
+  ggtitle("Product A sales") +
+  xlab("Year") +
+  ylab("Sales")
+```
+
+#### Product A sales shows strong seasonal pattern. Sales is down in the beginning and end of the year but spikes in mid year
+
+### b. Use a classical multiplicative decomposition to calculate the trend-cycle and seasonal indices
+
+```{r}
+plastics %>% decompose(type = "multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Multiplicative decomposition- Product:A Sales")
+```
+
+### c. Do the results support the graphical interpretation from part a?
+
+#### Classical decomposition results are inline with graphical interpretation from part a
+
+### d. Compute and plot the seasonally adjusted data
+
+```{r}
+plas.adj <- seasadj(decompose(plastics, type = "multiplicative"))
+autoplot(plas.adj) +
+  ggtitle("seasonally adjusted Product-A sales") + 
+  xlab("Year") +
+  ylab("Sales")
+```
+
+### e. Change one observation to be an outlier (e.g. add 500 to one observation), and recompute the seasonally adjusted data. What is the effect of the outlier?
+
+```{r}
+plas9 <- plastics
+plas9[9] <- plas9[9] + 1000
+plas.adj <- seasadj(decompose(plas9, type = "multiplicative"))
+autoplot(plas.adj) +
+  ggtitle("product A sales with outliers") +
+  xlab("Year") +
+  ylab("Sales")
+```
+
+#### Outlier causes huge spike at specific time inerval in the time series
+
+### f. Does it make any difference if the outlier is near the end rather than in the middle of the time series?
+
+```{r}
+plas1 <- plastics
+plas2 <- plastics
+
+plas1[2] <- plas1[2] + 1200
+plas2[55] <- plas2[55] + 1200
+
+plas1.adj <- seasadj(decompose(plas1, type = "multiplicative"))
+plas2.adj <- seasadj(decompose(plas2, type = "multiplicative"))
+
+autoplot(plas1.adj) +
+  ggtitle("Outlier-1")
+
+autoplot(plas2.adj) +
+  ggtitle("Outlier-2")
+
+```
+
+#### Timeframe of the outlier has no impact whatsoever
+
+## 6.3 Recall your retail time series data (from Exercise 3 in Section 2.10). Decompose this series using X11. Does it reveal any outliers or unusual features you had not noticed previously?
+
+```{r}
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+
+myts <- ts(retaildata[,"A3349627V"],
+  frequency=12, start=c(1982,4))
+
+fit <- seas(myts)
+autoplot(fit) +
+  ggtitle("Decomposition of retail data")
+```
+
+#### Retail data above shows a strong seasonal and trend. Trend is increasing over the period of time. Seasonal part is also varying over the period of time. Seasonal component has low amplitudes to start with but as we go further in time, seasonal variations increases in aplitude. This is a clear example of multiplicative time series. Remainder component of the decomposed graph also shows two outliers near year 1990
