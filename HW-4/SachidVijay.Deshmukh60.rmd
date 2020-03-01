@@ -1,0 +1,154 @@
+---
+title: "Data-624 Homework-4"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 03/01/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Homework4)
+
+## ---------------------------------------------------------------------------
+
+
+```{r echo=FALSE, include=FALSE}
+library(mlbench)
+library(corrplot)
+library(mice)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(fpp2)
+library(VIM)
+library(mice)
+```
+
+## 3.1 The UC Irvine Machine Learning Repository6 contains a data set related to glass identiﬁcation. The data consist of 214 glass samples labeled as one of seven class categories. There are nine predictors, including the refractive index and percentages of eight elements: Na, Mg, Al, Si, K, Ca, Ba, and Fe.
+
+```{r}
+data(Glass)
+glass.df = Glass
+glass.df = glass.df[, names(glass.df)[names(glass.df)!='Type']]
+names(glass.df)
+```
+
+### a Using visualizations, explore the predictor variables to understand their distributions as well as the relationships between predictors.
+
+```{r}
+ggpairs(glass.df) +
+  ggtitle("Pair plot for predictor variables")
+```
+
+#### We can see that there exist a strong positive correlation between variable RI and Ca with correlation coefficient = 0.81
+
+```{r}
+ggplot(data = glass.df, aes(x = RI, y=Ca)) +
+  geom_point() +
+  stat_smooth() +
+  ggtitle("Correlation plot for RI ~ Ca")
+```
+
+#### The positive correlation between variables RI and Ca can also be seen using above point plot by adding smoothen line in the plot
+
+### b Do there appear to be any outliers in the data? Are any predictors skewed?
+
+```{r}
+ggplot(data = stack(glass.df), aes(y = values, fill=as.factor(ind))) +
+  geom_boxplot(outlier.color = 'green', outlier.shape = 'square') +
+  facet_wrap(~ind, scales = 'free') +
+  ggtitle("Outlier detection using boxplot")
+```
+
+
+#### From the boxplot above we can see that outliers exists in all the variables except Mg. Predictrors Mg, Si, Ba, Fe and K are skewed
+
+### c Are there any relevant transformations of one or more predictors that might improve the classiﬁcation model?
+
+#### We can use standard scaling transformation to make all variables on equal scale to improve classification model. If predictor variables are on different scale, classification model can get influenced with variables with higher magnitude values and can take bias on that predictor more for classification. It is a good idea to get all the variables on same scale so that classification model can treat all the predictors with equal importance without getting influenced by predictor variable with high magnitude values
+
+```{r}
+glass.df.trans = apply(glass.df, 2, function(x) scale(x)) %>% data.frame()
+
+ggplot(data = stack(glass.df), aes(x=ind, y=values, fill=ind)) +
+  geom_boxplot()
+ggtitle('Boxplots of original data')
+
+ggplot(data = stack(glass.df.trans), aes(x=ind, y=values, fill=ind)) +
+  geom_boxplot()
+ggtitle('Boxplots of transformed data')
+
+```
+
+#### From the above boxplots we can see that original data frame has all the variables on different scale. However after applying scale trnsformation, all the variables are centered around mean 0
+
+### 3.2 The soybean data can also be found at the UC Irvine Machine Learning Repository. Data were collected to predict disease in 683 soybeans. The 35 predictors are mostly categorical and include information on the environmental conditions (e.g., temperature, precipitation) and plant conditions (e.g., left spots, mold growth). The outcome labels consist of 19 distinct classes.
+
+### a Investigate the frequency distributions for the categorical predictors. Are any of the distributions degenerate in the ways discussed earlier in this chapter?
+
+```{r}
+data("Soybean")
+df.soy = Soybean %>% data.frame(stringsAsFactors = FALSE)
+
+df.soy.new = apply(df.soy, 2, function(x) as.numeric(as.character(x))) %>% data.frame()
+df.soy.new[is.na(df.soy.new)] = 0
+ggplot(data = stack(df.soy.new), aes(x=as.factor(values),fill=as.factor(values))) +
+  geom_bar(stat='count', width=1) +
+  coord_flip()+
+
+  facet_wrap(~ind)
+```
+
+
+
+#### We can see distribution denerate for following variables
+
+* leaf.mild
+* ext.decay
+* int.discolor
+* roots
+
+### b Roughly 18% of the data are missing. Are there particular predictors that are more likely to be missing? Is the pattern of missing data related to the classes?
+
+```{r}
+ggr_plot <- aggr(df.soy, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, 
+                 labels=names(df.soy), cex.axis=.7, gap=3, 
+                 ylab=c("Histogram of missing data","Pattern"))
+```
+
+#### From the above missing data statistics we can see that overall 18% data is missing and variables hail, seed.tmt and germ have higher probability of missing data that other variables
+
+
+```{r}
+
+missing.cnt <- df.soy %>% group_by(Class) %>% 
+  summarise_all(~sum(is.na(.))) 
+
+missing.sum = rowSums(missing.cnt[,2:ncol(missing.cnt)]) %>% data.frame()
+
+missing.total = data.frame(Class = missing.cnt$Class, missingcnt = missing.sum$.)
+
+ggplot(data = missing.total, aes(x=reorder(Class, missingcnt), y =missingcnt, fill = Class)) +
+  geom_bar(stat='identity') +
+  coord_flip()
+```
+
+#### From the above bar chart we can see that some classes have high number of missing values compared to other classes. E.G variable phytophthora-rot has highest number of missing values followed by 2-4-d-injury and cyst-nematode variable
+
+### c Develop a strategy for handling missing data, either by eliminating predictors or imputation.
+
+#### We can use MICE package for data imputation
+
+```{r}
+impute_trans <- mice(df.soy, maxit=3)
+impute_complete <- complete(impute_trans, 1)
+ggr_plot <- aggr(impute_complete, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, 
+                 labels=names(impute_complete), cex.axis=.7, gap=3, 
+                 ylab=c("Histogram of missing data","Pattern"))
+
+```
+
+#### From the above missing data chart, we can see that there are no missing values after data imputation.
