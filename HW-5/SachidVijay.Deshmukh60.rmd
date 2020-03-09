@@ -1,0 +1,253 @@
+---
+title: "Data-624 Homework-5"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 03/08/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Homework5)
+
+## ---------------------------------------------------------------------------
+
+
+```{r echo=FALSE, include=FALSE}
+library(mlbench)
+library(corrplot)
+library(mice)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(fpp2)
+library(VIM)
+library(mice)
+```
+
+## 7.1 Consider the pigs series - the number of pigs slaughtered in Victoria each month.
+
+### Use the ses function in R to find the optimal values of alpha and sigma, and generate forecasts for the next four months.
+
+```{r}
+fit = ses(pigs, h = 4)
+print(fit$model)
+print(fit)
+```
+
+### Compute a 95% prediction interval for the first forecast using y ± 1.96s where s is the standard deviation of the residuals. Compare your interval with the interval produced by R.
+
+```{r}
+print(paste('Prediction interval of R', round(fit$lower[1, '95%'],2), '-', round(fit$upper[1,'95%']),2))
+
+print(paste('Prediction interval using residuals', round(fit$mean[1] - 1.96 * sd(fit$residuals),2), '-', round(fit$mean[1] + 1.96 * sd(fit$residuals),2)))
+```
+
+#### Intervals predicted using R and residuals are different
+
+## 7.5 Data set books contains the daily sales of paperback and hardcover books at the same store. The task is to forecast the next four days' sales for paperback and hardcover books.
+
+### a. Plot the series and discuss the main features of the data.
+
+```{r}
+autoplot(books) +
+  ggtitle('Daily sales of paper and hardcover books sale')
+```
+
+#### Both paperback and handcover daily book sales represents upword trend 
+#### Hardcover book sale doesn't show any seasonality
+#### Paperback book sale shows seasonal pattern where book sale tends peak by end of the week and it decreases sharply in mid week
+
+### b. Use the ses function to forecast each series, and plot the forecasts.
+
+```{r}
+fit_pb_ses <- ses(books[, "Paperback"], h = 4)
+fit_hc_ses <- ses(books[, "Hardcover"], h = 4)
+
+autoplot(books[, "Paperback"], series = "Paperback") +
+  autolayer(fit_pb_ses, series = "Paperback", PI = FALSE) +
+  autolayer(books[, "Hardcover"], series = "Hardcover") +
+  autolayer(fit_hc_ses, series = "Hardcover", PI=FALSE) +
+  ylab("Books Sale") +
+  ggtitle("Daily Paperback and hardcover books sales")
+```
+
+#### We can see that SES method produces flat forecast which doesn't account for underlying trend
+
+### c. Compute the RMSE values for the training data in each case.
+
+```{r}
+print(paste('RMSE for Paperback book sales =' , accuracy(fit_pb_ses)[2], 'RMSE for Hardcover books sale =', accuracy(fit_hc_ses)[2]))
+```
+
+#### We can see that RMSE value for hardcover books sale is lesser than RMSE value for paperback books sale
+
+## 7.6 We will continue with the daily sales of paperback and hardcover books in data set books.
+
+### a. Now apply Holt's linear method to the paperback and hardback series and compute four-day forecasts in each case.
+
+```{r}
+fit_pb_h <- holt(books[, "Paperback"], h = 4)
+fit_hc_h<- holt(books[, "Hardcover"], h = 4)
+
+autoplot(books[, "Paperback"], series = "Paperback") +
+  autolayer(fit_pb_h, series = "Paperback", PI = FALSE) +
+  autolayer(books[, "Hardcover"], series = "Hardcover") +
+  autolayer(fit_hc_h, series = "Hardcover", PI=FALSE) +
+  ylab("Books Sale") +
+  ggtitle("Daily Paperback and hardcover books sales")
+```
+
+#### We can see that Holt's linear method was able to capture increasing trend within the series
+
+### b. compare the RMSE measures of Holt's method for the two series to those of simple exponential smoothing in the previous question. (Remember that Holt's method is using one more parameter than SES.) Discuss the merits of the two forecasting methods for these data sets.
+
+```{r}
+print(paste('RMSE for Paperback book sales =' , accuracy(fit_pb_h)[2], 'RMSE for Hardcover books sale =', accuracy(fit_hc_h)[2]))
+```
+
+#### We can see that RMSE for hardcover and paperback books sale improved using Holt's linear method compAred to SES method. SES is a simpler model with just one parameter for level. Holt's linear method uses two paramters one for level and other for trend. I think in this case since underlying time series exhibits upword trend Holt's linear model is more effective. Same reflects in the RMSE values of the model as well
+
+### c. Compare the forecasts for the two series using both methods. Which do you think is best?
+
+#### Based on the RMSE values and the fact that underlying time series has trend component, I will say forecast generated from Holt's linear method is best
+
+### d. Calculate a 95% prediction interval for the first forecast for each series, using the RMSE values and assuming normal errors. Compare your intervals with those produced using ses and holt.
+
+```{r}
+print(paste('Prediction interval of R SES (Papeback)', round(fit_pb_ses$lower[1, '95%'],2), '-', round(fit_pb_ses$upper[1,'95%']),2))
+
+print(paste('Prediction interval of R SES (Hardcover)', round(fit_hc_ses$lower[1, '95%'],2), '-', round(fit_hc_ses$upper[1,'95%']),2))
+
+print(paste('Prediction interval using RMSE SES (Paperback)', round(fit_pb_ses$mean[1] - 1.96 * accuracy(fit_pb_ses)[2],2), '-', round(fit_pb_ses$mean[1] + 1.96 * accuracy(fit_pb_ses)[2],2)))
+
+print(paste('Prediction interval using RMSE SES (Hardcover)', round(fit_hc_ses$mean[1] - 1.96 * accuracy(fit_hc_ses)[2],2), '-', round(fit_hc_ses$mean[1] + 1.96 * accuracy(fit_hc_ses)[2],2)))
+
+print(paste('Prediction interval of R Holt (Papeback)', round(fit_pb_h$lower[1, '95%'],2), '-', round(fit_pb_h$upper[1,'95%']),2))
+
+print(paste('Prediction interval of R Holt (Hardcover)', round(fit_hc_h$lower[1, '95%'],2), '-', round(fit_hc_h$upper[1,'95%']),2))
+
+print(paste('Prediction interval using RMSE Holt (Paperback)', round(fit_pb_h$mean[1] - 1.96 * accuracy(fit_pb_h)[2],2), '-', round(fit_pb_h$mean[1] + 1.96 * accuracy(fit_pb_h)[2],2)))
+
+print(paste('Prediction interval using RMSE Holt (Hardcover)', round(fit_hc_h$mean[1] - 1.96 * accuracy(fit_hc_h)[2],2), '-', round(fit_hc_h$mean[1] + 1.96 * accuracy(fit_hc_h)[2],2)))
+```
+
+#### Prediction interval produced using R and RMSE for both the methods (SES and Holt) are not exactly same but very close
+
+## 7.7 For this exercise use data set eggs, the price of a dozen eggs in the United States from 1900-1993. Experiment with the various options in the holt() function to see how much the forecasts change with damped trend, or with a Box-Cox transformation. Try to develop an intuition of what each argument is doing to the forecasts.
+
+#### [Hint: use h=100 when calling holt() so you can clearly see the differences between the various options when plotting the forecasts.]
+
+## Which model gives the best RMSE?
+
+```{r}
+fit.holt <- holt(eggs, h=100)
+fit.holt.damped <- holt(eggs, damped=TRUE, h=100)
+fit.holt.boxcox <- holt(eggs, lambda = BoxCox.lambda(eggs), h=100)
+fit.holt.boxcox.damped <- holt(eggs, lambda = BoxCox.lambda(eggs), h=100, damped=TRUE)
+
+autoplot(eggs) +
+  autolayer(fit.holt, series="Holt's method", PI=FALSE) +
+  autolayer(fit.holt.damped, series="Damped Holt's method", PI=FALSE) +
+  autolayer(fit.holt.boxcox, series="Box-Cox", PI=FALSE)+
+  autolayer(fit.holt.boxcox.damped, series="Box-Cox-Damped", PI=FALSE)+
+  ggtitle("Forecasts from Holt's method") + xlab("Year") +
+  ylab("Eggs") +
+  guides(colour=guide_legend(title="Forecast"))
+```
+
+#### We can see that damped method produces very flat forecast without capturing underlying negative trend. The moethod which are not damped produces unrealistic forecast with price prediction close to zero or even negative.
+
+```{r}
+print(paste('Accuracy Holt', accuracy(fit.holt)[2]))
+print(paste('Accuracy Holt Damped', accuracy(fit.holt.damped)[2]))
+print(paste('Accuracy Holt BoxCox', accuracy(fit.holt.boxcox)[2]))
+print(paste('Accuracy Holt BoxCox Damped', accuracy(fit.holt.boxcox.damped)[2]))
+```
+
+#### We can see that from RMSE the model with BoxCox without damping is the best
+
+## 7.8 Recall your retail time series data (from Exercise 3 in Section 2.10).
+### a. Why is multiplicative seasonality necessary for this series?
+
+```{r}
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+
+myts <- ts(retaildata[,"A3349627V"],
+  frequency=12, start=c(1982,4))
+autoplot(myts)
+```
+
+#### From the above plot we can see that magnitude of the seasonal effect changes over the period time. This indicate the time series is multiplicative in seasonal behaviour
+
+### b. Apply Holt-Winters' multiplicative method to the data. Experiment with making the trend damped.
+
+```{r}
+fit.hw <- hw(myts, h=120, seasonal = "multiplicative")
+fit.hw.damped <- hw(myts, h=120, seasonal = "multiplicative", damped = TRUE)
+
+autoplot(myts) +
+  autolayer(fit.hw, series="Holt's method", PI=FALSE) +
+  autolayer(fit.hw.damped, series="Damped Holt's method", PI=FALSE) +
+  ggtitle("Multiplicative seasonal forecast") + xlab("Year") +
+  ylab("MyTs")
+
+```
+
+#### We can see that damped methods generated less agressive forecast compared to un-damped method
+
+### c. Compare the RMSE of the one-step forecasts from the two methods. Which do you prefer?
+
+```{r}
+fit.hw.errors <- tsCV(myts, hw, h=1, seasonal="multiplicative")
+fit.hw.damped.errors <- tsCV(myts, hw, h = 1, seasonal = "multiplicative", damped = TRUE)
+
+print(paste('HW RMSE = ', sqrt(mean(fit.hw.errors ^2, na.rm = TRUE))))
+print(paste('HW Damped RMSE = ', sqrt(mean(fit.hw.damped.errors ^2, na.rm = TRUE))))
+
+```
+
+#### Damped method has lower RMSE so we will prefer damped method with seasonal multiplication
+
+### d. Check that the residuals from the best method look like white noise.
+
+```{r}
+checkresiduals(fit.hw.damped)
+```
+
+#### The residual plot doesn't show homoscadasticity. We can see that variability in residuals are high in the begining and it decreases over the period of time. From the ACF graph we can see that there exists a correlation in the residuals. The Box test also suggests that residuals doesn't represent white noice
+
+### e. Now find the test set RMSE, while training the model to the end of 2010. Can you beat the seasonal naive approach from Exercise 7 in Section 3.7?
+
+```{r}
+myts.train <- window(myts, end=c(2010,12))
+myts.test <- window(myts, start=2011)
+
+fit.hw.damped <- hw(myts.train, seasonal="multiplicative", damped=TRUE)
+fit.seasonal.naive <- snaive(myts.train)
+
+print(paste('RMSE for HW Damped Method =',accuracy(fit.hw.damped, myts.test)[2] , 'RMSE for seasonal naive method = ', accuracy(fit.seasonal.naive, myts.test)[2]))
+
+```
+
+#### We can see the HW method with multiplicative seasonality and with dampening effect performs far better than seasonal naive method
+
+## 7.9 For the same retail data, try an STL decomposition applied to the Box-Cox transformed series, followed by ETS on the seasonally adjusted data. How does that compare with your best previous forecasts on the test set?
+
+```{r}
+l = BoxCox.lambda(myts.train)
+fit.stl= stlf(myts.train, lambda = l)
+fit.ets = ets(seasadj(decompose(myts.train, "multiplicative"))) 
+
+autoplot(myts.train, series = "train") +
+  autolayer(forecast(fit.stl, h = 24, PI=F), series = "STL Forecast") +
+  autolayer(forecast(fit.ets, h = 24, PI=F), series = "ETS Forcast") +
+  autolayer(myts.test, series = "test")
+
+print(paste('RMSE for STL Method =',accuracy(fit.stl, myts.test)[2] , 'RMSE for ets method = ', fit.ets$mse ^0.5 ))
+
+```
+
+#### STL method outperforms ETS method forecast on seasonally adjusted time series. The previous method (HW with damped) has RMSE = 5.20, STL method outperforms HW with damped model also
