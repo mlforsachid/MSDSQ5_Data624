@@ -1,0 +1,232 @@
+---
+title: "Data-624 Homework-6"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 03/22/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Homework6)
+
+## ---------------------------------------------------------------------------
+
+
+```{r echo=FALSE, include=FALSE}
+library(mlbench)
+library(corrplot)
+library(mice)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(fpp2)
+library(magrittr)
+library(dplyr)
+```
+
+## 8.1 The following figure shows the ACFs for 36 random numbers, 360 random numbers and 1,000 random numbers.
+
+### a. Explain the differences among these figures. Do they all indicate that the data are white noise?
+
+#### Bounds of the acf graphs among time series is different. Bound becomes smaller as length of the time series increases. 95% confidence interval of the acf graph can be calculated using formulae 1.96/sqrt(T) where T is the length of time series. That explains the bounds becoming narrower as length of the time series increases. All the figures shows no significant auto correlation indicating samples are iid with zero mean which is the characteristic exhibited by white noice
+
+### b. Why are the critical values at different distances from the mean of zero? Why are the autocorrelations different in each figure when they each refer to white noise?
+
+#### Auto correlation referes to how observed values of time series are correlated to itself at a given lag by not removing the effect of correlation between observations in between the lag. Thus autocorrleation is a direct effect as well as indirect effect of correlation.
+
+#### Ideally for white noice series there should be no auto-correlation. However with 95% confidence interval there is a chance of observing 1 significant instances of auto-correlation for a given lag for evety 20 observations. White noice series also consists of random component which makes this autocorrelation instances random.
+
+## 8.2 A classic example of a non-stationary series is the daily closing IBM stock price series (data set ibmclose). Use R to plot the daily closing prices for IBM stock and the ACF and PACF. Explain how each plot shows that the series is non-stationary and should be differenced.
+
+```{r}
+autoplot(ibmclose) +
+  ggtitle('Daily closing prices for IBM stock')
+
+ggAcf(ibmclose)+
+  ggtitle('ACF - Daily closing prices for IBM stock')
+
+ggPacf(ibmclose)+
+  ggtitle('PACF - Daily closing prices for IBM stock')
+```
+
+#### Time series is weakly stationary when mean and variance of the time series doesn't vary when time series is shifted with a lag l. From the autoplot above we can see that mean of the time series is not constant. Time series also shows different variance at different lag
+
+#### ACF plot shows strong correlation till lag 25 giving a strong indication that time series is not stationary and differentiation is necessary in order to make it stationary
+
+## 8.3 For the following series, find an appropriate Box-Cox transformation and order of differencing in order to obtain stationary data.
+
+```{r}
+timeserieslist = list('usnetelec' = usnetelec, 'usgdp' = usgdp, 'mcopper' = mcopper, 'enplanements' = enplanements, 'visitors' = visitors)
+curiter = 1
+for(ts in timeserieslist)
+{
+  print(paste('Time Series =', names(timeserieslist)[curiter]))
+  print(paste('BoxCox transformation lambda = ', BoxCox.lambda(ts)))
+  tryCatch(
+    {
+      print(paste('Order of seasonal differencing = ', nsdiffs(ts)))
+    }, error = function(e) {
+      print('Time series is not seasonal. No Seasonal diff is required')
+    })
+  
+  print(paste('Order of differencing = ', ndiffs(ts)))
+  curiter = curiter + 1
+}
+```
+
+## 8.6 Use R to simulate and plot some data from simple ARIMA models
+
+### a. Use the following R code to generate data from an AR(1) model with ϕ1=0.6 and σ2=1. The process starts with y1=0.
+
+### b. Produce a time plot for the series. How does the plot change as you change ϕ1
+
+```{r}
+getTS = function(param = 0.6)
+{
+  seed = 123
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  for(i in 2:100)
+    y[i] <- param*y[i-1] + e[i]
+  return(y)
+}
+cbind("Theta = 0.6" = getTS(0.6), "Theta = 0" = getTS(0), "Theta = 1" = getTS(1), "Theta = -1" = getTS(-1)) %>%
+  autoplot(facets=TRUE)
+```
+
+
+
+#### When Theta is 0 time series behaves like a white noice. For Theta 0.6 time series is stationary without any trend or seasonality. For Theta 1 time series exhbits random walk behaviour. When Theta is -1 then time series oscilates around mean 0
+
+### c. Write your own code to generate data from an MA(1) model with θ1=0.6 and σ2=1.
+
+### d. Produce a time plot for the series. How does the plot change as you change θ1
+
+```{r}
+getTS = function(param = 0.6)
+{
+  seed = 123
+  y <- ts(numeric(100))
+  forecast.err <- rnorm(100)
+  rand.err = rnorm(100)
+  for(i in 2:100)
+    y[i] <- param *  forecast.err[i-1] + rand.err[i]
+  return(y)
+}
+
+cbind("Theta = 0.6" = getTS(0.6), "Theta = 0" = getTS(0), "Theta = 1" = getTS(1), "Theta = -1" = getTS(-1)) %>%
+  autoplot(facets=TRUE)
+```
+
+### For all the values of theta series exhbits white noice pattern with no trend and seasonality. Higher the theta higher is the variance of the time series
+
+### e. Generate data from an ARMA(1,1) model with ϕ1=0.6, θ1=0.6 and σ2=1.
+
+```{r}
+getTS = function(alpha = 0.6, theta = 0.6)
+{
+  seed = 123
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  rand.error = rnorm(100)
+  for(i in 2:100)
+    y[i] <- alpha *  y[i-1] + theta * e[i] + rand.error[i]
+  return(y)
+}
+
+getTS() %>%
+  autoplot(facets =TRUE)
+```
+
+### f. Generate data from an AR(2) model with ϕ1=−0.8, ϕ2=0.3 and σ2=1. (Note that these parameters will give a non-stationary series.)
+
+```{r}
+getTS = function(alpha1 = -0.8,  alpha2 = 0.3)
+{
+  seed = 123
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  for(i in 3:100)
+    y[i] <- alpha1 *  y[i-1] + alpha2 *  y[i-2] + e[i]
+  return(y)
+}
+
+getTS() %>%
+  autoplot(facets =TRUE)
+```
+
+### g. Graph the latter two series and compare them.
+
+#### ARMA(1,1) time series is stationalry however AR(2) time series is non stationary
+
+## 8.7 Consider wmurders, the number of women murdered each year (per 100,000 standard population) in the United States.
+
+### a. By studying appropriate graphs of the series in R, find an appropriate ARIMA(p,d,q) model for these data.
+
+```{r}
+autoplot(wmurders)
+```
+
+#### From the time series plot we can see that time series had increasing trend till 1980 and decreasing trend post that. We can also conclude that time series is not stationary
+
+```{r}
+ndiffs(wmurders)
+```
+#### ndiffs function suggests that second order difference is expected
+
+```{r}
+ggAcf(diff(diff(wmurders)))
+```
+#### ACF plot show strong autocorrelation till lag 1 so parameter q will be 1
+
+```{r}
+ggPacf(diff(diff(wmurders)))
+```
+
+#### PACF plot doesn't show any significant autocorrelation so parameter p will be 0
+
+#### Suggested model for this time series is ARIMA(0, 2, 1)
+
+### b. Should you include a constant in the model? Explain.
+
+#### Looking at the downward trend of the time series, long term forecast will approach to 0. Adding constant will help in producing non zero forecast
+
+### c. Write this model in terms of the backshift operator.
+
+#### (1−ϕ1B)(1−B)2yt=c+εt , where c is constant
+
+### d. Fit the model using R and examine the residuals. Is the model satisfactory?
+
+```{r}
+fit = Arima(wmurders, order = c(0,2,1))
+checkresiduals(fit)
+```
+
+#### Residual plots shows satisfactory results. Residuals are normally distributed and ACF plot doesn't show any auto-correlation. Residuals are also homo-scadastic
+
+### e. Forecast three times ahead. Check your forecasts by hand to make sure that you know how they have been calculated.
+
+```{r}
+forecast(fit, h=3)
+res = tail(residuals(fit),1)
+ts = tail(wmurders,3)
+
+yt = (2 * ts[3])−(ts[2])−(0.89 * res)
+print(paste('Forecast for yt = ', (yt)))
+yt1 = (2 * yt)−(ts[3])−(0.89 * 0)
+print(paste('Forecast for yt+1 = ',yt1))
+yt2 = (2 * yt1)−(yt)−(0.89 * 0)
+print(paste('Forecast for yt+2 = ',yt2))
+```
+
+### f. Create a plot of the series with forecasts and prediction intervals for the next three periods shown. Does auto.arima() give the same model you have chosen? If not, which model do you think is better?
+
+```{r}
+autoplot(forecast(fit, h=3))
+auto.arima(wmurders)
+```
+
+#### Both models are comparable. Auto Arima is better due to lower AIC
