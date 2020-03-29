@@ -1,0 +1,298 @@
+---
+title: "Data-624 Project-1"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 03/29/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Project-1)
+
+## ---------------------------------------------------------------------------
+
+
+```{r echo=FALSE, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(fpp2)
+library(magrittr)
+library(dplyr)
+library(data.table)
+```
+
+## Part-A
+
+### In part A, I want you to forecast how much cash is taken out of 4 different ATM machines for May 2010. The data is given in a single file. The variable ‘Cash’ is provided in hundreds of dollars, other than that it is straight forward. I am being somewhat ambiguous on purpose to make this have a little more business feeling. Explain and demonstrate your process, techniques used and not used, and your actual forecast. I am giving you data via an excel file, please provide your written report on your findings, visuals, discussion and your R code via an RPubs link along with the actual.rmd file. Also please submit the forecast which you will put in an Excel readable file.
+
+#### Load data from excel and convert date column to Date format
+```{r}
+atm.df = fread("ATM624Data.txt", sep='\t', header=TRUE, stringsAsFactors =FALSE)
+atm.df$DATE = as.Date(atm.df$DATE, format='%m/%d/%Y 12:00:00 AM', origin = '1990-01-01')
+```
+
+#### View loaded data frame
+```{r}
+head(atm.df)
+```
+
+#### As we can see in the dataframe above there are three columns
+
+* Date : Date of cash withdrawal
+* ATM : ATM machine from which cash is withdrawn
+* Cash : Cash amount withdrawn
+
+#### Our aim is to forecast monthly withdrawal of cash from all four different ATMs. For this purpose we will take monthly sum of cash withdrawn from all four ATMs and convert that into monthly time series. Also note that we have NA records for May-2010 we will remove those records because we are anyway forecasting for month May-2010
+
+```{r}
+atm.df$DateStr = paste0(year(atm.df$DATE), '-', month(atm.df$DATE))
+atm.df = atm.df %>% dplyr::filter(!is.na(Cash)) %>% dplyr::group_by(DateStr) %>% dplyr::summarise(Cash = sum(Cash)) %>% dplyr::select(-DateStr)
+atm.ts = ts(atm.df, start=c(2009,5), end=c(2010,4), frequency=12)
+```
+
+#### Let's plot the monthly time series
+
+```{r}
+
+autoplot(atm.ts) +
+  xlab('Time') +
+  ylab('MonthlyCash') +
+  ggtitle ('Time series plot showing total monthly cash withdrawn from all four ATMs')
+  
+```
+
+#### Above time series plot represents total monthly cash withdrawn from all four ATMs. From the time series plot we can see that time series doesn't show any seasonal pattern. There is a upword trend till Jan-2010 and downward trend post that. There seems to be outlier indicating huge cash withdrawn in the month of Feb-2010.
+
+#### Let's try following forecating models on this time series and assess which one is better in terms of RMSE. We will use time series cross validation function to calculate RMSE for eash model
+
+* Seasonal Naive Model
+* Random walk model
+* ETS model
+* ARIMA model
+
+```{r}
+calcRMSE = function(modelName, modelFunc)
+{
+  res = tsCV(atm.ts,modelFunc)
+  print(paste('RMSE for model', modelName, '=', sqrt(mean(res^2, na.rm=TRUE))))
+}
+```
+
+#### Fit seasonal naive model and calc RMSE
+
+```{r}
+calcRMSE('Seasonal Naive', snaive)
+```
+
+#### Fit Random Walk model and calc RMSE
+
+```{r}
+calcRMSE('Random Walk', rwf)
+```
+
+#### Fit ARIMA model and calc RMSE
+
+```{r}
+func <- function(x, h){forecast(auto.arima(x), h=h)}
+calcRMSE('ARIMA', func)
+```
+
+#### Fit ETS model and calc RMSE
+
+```{r}
+func <- function(x, h){forecast(ets(x, model="ZZZ" ), h=h)}
+calcRMSE('ETS', func)
+```
+
+#### We can see that ETS model gives us best RMSE. Let's analyze model details
+
+```{r}
+fit = ets(atm.ts, model = 'ZZZ')
+summary(fit)
+```
+
+#### We can see that auto selection method of ETS has chosen ETS (M,N,N) model indicating multiplicative error terms and No trend and seasonality
+
+#### Let's analyze residuals
+
+```{r}
+checkresiduals(fit)
+```
+
+#### Large value of Ljung-Box test shows that residuals are not correlated. ACF plot also confirms the same. Histogram suggests that residuals are normally distributed. The Residual plot indicates a huge outlier presense, which is in line with our finding in the time series
+
+
+#### Let's use ETS(M,N,N) model to generate forecat for May-2010
+
+```{r}
+fcst = forecast(fit, h=1)
+print(fcst)
+fwrite(data.frame(fcst), "ATMForecast.csv", sep=",", col.names = TRUE, row.names = FALSE)
+```
+
+#### From the above forecast we can expect the withdrwal from all four ATMs in the month of May-2010 as $18224. The lower bound with 95% confidence interval is $11606 and upper bound is $22551
+
+#### Let's plot the forecast
+
+```{r}
+autoplot(fcst, pi=TRUE) +
+  ggtitle("Monthly withdrawal forecast from all four ATMs")
+```
+
+#### Autoplot above shows point forecast along with 95% confidence interval
+
+## Part-B
+
+### Part B consists of a simple data set of residential power usage for January 1998 until December 2013. Your assignment is to model these data and a monthly forecast for 2014. The data is given in a single file. The variable ‘KWH’ is power consumption in Kilowatt hours, the rest is straight forward. Add this to your existing files above.
+
+#### Load data
+
+```{r}
+df.power  = fread("ResidentialCustomerForecastLoad-624.txt", header=TRUE, sep = '\t', stringsAsFactors = FALSE)
+```
+
+#### View dataframe preview
+
+```{r}
+head(df.power)
+summary(df.power)
+```
+
+#### Note that KWH column has one NA value. Lets fill that value with median value of KWH
+
+```{r}
+df.power$KWH[is.na(df.power$KWH)] = median(df.power$KWH, na.rm = TRUE)
+summary(df.power)
+```
+
+#### Let's remove Year and Month string column and convert the time series into monthly frequency
+
+```{r}
+power.ts = ts(df.power$KWH, start = c(1998,1), end=c(2013,12), frequency = 12)
+```
+
+#### Let's plot the time series
+
+```{r}
+autoplot(power.ts) +
+  xlab('Month') +
+  ylab('KWH') +
+  ggtitle('Monthly power consumption in KWH')
+```
+
+#### From the above time series we can see an outlier in year 2010. The Time series exhibits seasonal pattern indicating high power consumption in winter and summar time and low power consumption in rest of the period. There is no upward ot downward trend exhibited by the time series indicating the demand for power is relatively stable from 2000 to 2013. We can see the surge in peaks has increased after 2010 indicating high usage of power during winter and summer season post 2010
+
+#### Let's use STL decomposition to confirm our findings
+
+```{r}
+res = stl(power.ts, s.window = 12)
+plot(res)
+```
+
+#### We can see that STL plot above shows strong seasonal pattern. There is no underlying trend however there is a surge in power consumption post 2010. The unusually low power consumption in the year 2010 is appearent in the error plot above
+
+#### Above is also a non-stationary time series. Let's see what order differencing is required to make it stationary
+
+```{r}
+print(paste('Order of seasonal difference required = ', nsdiffs(power.ts)))
+print(paste('Order of difference required = ', ndiffs(power.ts)))
+```
+#### We can see that we need first order seasonal difference followed by first order regular difference to make this time series stationary
+
+#### Let's try following forecating models on this time series and assess which one is better in terms of RMSE. We will use time series cross validation function to calculate RMSE for eash model
+
+* Seasonal Naive Model
+* Random walk model
+* ETS model
+* ARIMA model
+
+```{r}
+calcRMSE = function(modelName, modelFunc)
+{
+  res = tsCV(power.ts,modelFunc)
+  print(paste('RMSE for model', modelName, '=', sqrt(mean(res^2, na.rm=TRUE))))
+}
+```
+
+#### Fit seasonal naive model and calc RMSE
+
+```{r}
+calcRMSE('Seasonal Naive', snaive)
+```
+
+#### Fit Random Walk model and calc RMSE
+
+```{r}
+calcRMSE('Random Walk', rwf)
+```
+
+#### Fit Seasonal ARIMA model and calc RMSE
+
+```{r}
+func <- function(x, h){forecast(auto.arima(x), h=h, seasonal=TRUE)}
+calcRMSE('ARIMA', func)
+```
+
+#### Fit ETS model and calc RMSE
+
+```{r}
+func <- function(x, h){forecast(ets(x, model="ZZZ"), h=h)}
+calcRMSE('ETS', func)
+```
+
+#### We can see that ETS model gives us best RMSE. Let's analyze model details
+
+```{r}
+fit = ets(power.ts, model = 'ZZZ')
+summary(fit)
+```
+
+#### We can see that auto selection method of ETS has chosen ETS (M,N,M) model indicating multiplicative error terms and No trend and multiplicative seasonality. This make sense based on time series and STL dcomposition results
+
+#### Let's analyze residuals
+
+```{r}
+checkresiduals(fit)
+```
+
+#### Residual plots are not satisfactory. small value of Ljung-Box test shows that residuals are correlated. ACF plot also confirms the same. Histogram suggests that residuals are not normally distributed. It shows huge left skew in the residual distribution.  The Residual plot indicates a huge outlier presense in year 2010, which is in line with our finding in the time series
+
+#### Let's apply BoxCox transformation on the time series and see the results
+
+```{r}
+fit = ets(power.ts, model = 'ZZZ', lambda = BoxCox.lambda(power.ts))
+summary(fit)
+```
+
+#### We can see that RMSE is greatly improved using BoxCox transformation. We can also see that BoxCox transformation changes ETS model to ETS(A,N,A) where error and seasonality are additive and there is no trend
+
+#### Let's visualize residuals
+
+```{r}
+checkresiduals(fit)
+```
+
+#### Residual plots are satisfactory. Large value of Ljung-Box test shows that residuals are not correlated. ACF plot also confirms the same. Histogram suggests that residuals are not normally distributed however it appears to be acceptable
+
+#### Let's use ETS(A,N,A) model to generate forecast for 2014
+
+```{r}
+fcst = forecast(fit, h=12, lambda = BoxCox.lambda(power.ts))
+print(fcst)
+fwrite(data.frame(fcst), "PowerForecast.csv", sep=",", col.names = TRUE, row.names = FALSE)
+```
+
+
+#### Let's plot the forecast
+
+```{r}
+autoplot(fcst, pi=TRUE) +
+  ggtitle("Forecast - Power consumption in KWH")
+```
+
+#### Autoplot above shows point forecast along with 95% confidence interval for 2014 energy consumption in KWH using ETS(A,N,A) model with BoxCox transformation
+
