@@ -1,0 +1,140 @@
+---
+title: "Data-624 Homework-7"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 04/05/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Homework7)
+
+## ---------------------------------------------------------------------------
+
+```{r include=FALSE}
+library(mice)
+library(VIM)
+library(caret)
+library(elasticnet)
+library(Boruta)
+library(corrplot)
+library(ggplot2)
+library(Hmisc)
+library(PerformanceAnalytics)
+library(dplyr)
+library(magrittr)
+```
+
+## 6.3 A chemical manufacturing process for a pharmaceutical product was discussed in Sect. 1.4. In this problem, the objective is to understand the relationship between biological measurements of the raw materials (predictors), measurements of the manufacturing process (predictors), and the response of product yield. Biological predictors cannot be changed but can be used to assess the quality of the raw material before processing. On the other hand, manufacturing process predictors can be changed in the manufacturing process. Improving product yield by 1 % will boost revenue by approximately one hundred thousand dollars per batch:
+
+### a. Start R and use these commands to load the data:
+
+```{r}
+library(AppliedPredictiveModeling)
+data(ChemicalManufacturingProcess)
+```
+
+### The matrix processPredictors contains the 57 predictors (12 describing the input biological material and 45 describing the process predictors) for the 176 manufacturing runs. yield contains the percent yield for each run.
+
+### b. A small percentage of cells in the predictor set contain missing values. Use an imputation function to fill in these missing values (e.g., see Sect. 3.8).
+
+#### **Check missing values**
+
+```{r echo =FALSE}
+miss.cols = apply(ChemicalManufacturingProcess, 2, function(x) any(is.na(x)))
+print(paste("Number of columns with missing values = ", length(names(miss.cols[miss.cols==TRUE]))))
+print(paste("Names of columns with missing values = ", paste(names(miss.cols[miss.cols==TRUE]), collapse = ', ')))
+      
+```
+
+#### **Let's do data imputation for missing columns**
+
+#### Which columns are mssing and what is a missing pattern. Let's leverage VIM package to get this information
+
+```{r echo=FALSE}
+ggr_plot <- aggr(ChemicalManufacturingProcess, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(ChemicalManufacturingProcess), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+```
+
+#### **Let's use MICE package to imput missing values**
+
+```{r echo=FALSE, output=FALSE}
+tmp.data <- mice(ChemicalManufacturingProcess,m=2,maxit=5,meth='pmm',seed=500)
+ChemicalManufacturingProcess = complete(tmp.data)
+```
+
+### c. Split the data into a training and a test set, pre-process the data, and tune a model of your choice from this chapter. What is the optimal value of the performance metric?
+
+```{r}
+# train test split
+set.seed(100)
+rows = nrow(ChemicalManufacturingProcess)
+t.index <- sample(1:rows, size = round(0.75*rows), replace=FALSE)
+df.train <- ChemicalManufacturingProcess[t.index ,]
+df.test <- ChemicalManufacturingProcess[-t.index ,]
+df.train.x = df.train[,-1]
+df.train.y = df.train[,1]
+df.test.x = df.test[,-1]
+df.test.y = df.test[,1]
+
+```
+
+#### dataframe have lots of variable. Let's use penalized regression model 
+
+```{r}
+ridgeGrid = data.frame(.lambda = seq(0, .1, length = 15))
+
+
+ridgeReg.fit = train(df.train.x, df.train.y, method = 'ridge', tuneGrid = ridgeGrid, trControl  = trainControl(), preProc = c("center", "scale"))
+
+ridgeReg.fit
+
+```
+
+### d. Predict the response for the test set. What is the value of the performance metric and how does this compare with the re-sampled performance metric on the training set?
+
+```{r}
+ridgeModel = enet(x = as.matrix(df.train.x), y = df.train.y, lambda = 0.1)
+ridgePred = predict(ridgeModel, newx = as.matrix(df.test.x), s=1, mode = 'fraction')
+
+
+df.train.y = as.numeric(df.train.y)
+ridgePred = as.numeric(ridgePred$fit)
+rmse = (sqrt(sum((ridgePred - df.train.y) ^2)))/nrow(df.test)
+
+print(paste('Test RMSE = ', rmse))
+```
+
+#### Test RMSE is higher than train RMSE
+
+### e. Which predictors are most important in the model you have trained? Do either the biological or process predictors dominate the list?
+
+#### Let's use Boruta to identify variable importance
+```{r}
+boruta.train = Boruta(df.train.x, df.train.y)
+print(boruta.train)
+plot(boruta.train, xlab = "", xaxt = "n")
+lz<-lapply(1:ncol(boruta.train$ImpHistory),function(i)
+boruta.train$ImpHistory[is.finite(boruta.train$ImpHistory[,i]),i])
+names(lz) <- colnames(boruta.train$ImpHistory)
+Labels <- sort(sapply(lz,median))
+axis(side = 1,las=2,labels = names(Labels),
+at = 1:ncol(boruta.train$ImpHistory), cex.axis = 0.7)
+```
+
+#### Process predictors dominate the list. Which makes more sense regarding yield outcome variable. Yield can be better with better manufacturing process components
+
+### f. Explore the relationships between each of the top predictors and the response. How could this information be helpful in improving yield in future runs of the manufacturing process?
+
+#### Plot correltion matrix of data
+
+```{r echo=FALSE}
+  
+df.train %>% dplyr::select(BiologicalMaterial04, ManufacturingProcess28, ManufacturingProcess09, ManufacturingProcess17, ManufacturingProcess12, ManufacturingProcess13, BiologicalMaterial06) %>%
+  chart.Correlation(histogram=TRUE, pch=19, method = 'pearson')
+  
+```
+
+#### From the above correlation matrix, we can see that Yield has higher positive correlation with Manufacturing Processes. Better the manufacturing processes better is the yield
