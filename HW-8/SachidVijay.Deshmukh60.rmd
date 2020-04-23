@@ -1,0 +1,203 @@
+---
+title: "Data-624 Homework-8"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 04/23/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Homework8)
+
+## ---------------------------------------------------------------------------
+
+```{r include=FALSE}
+library(mlbench)
+library(caret)
+library(earth)
+library(kernlab)
+library(nnet)
+library(ggplot2)
+library(mice)
+
+```
+
+## 7.2
+
+### Load data
+
+
+```{r}
+set.seed(200)
+trainingData = mlbench.friedman1(200, sd=1)
+trainingData$x = data.frame(trainingData$x)
+testData = mlbench.friedman1(5000, sd=1)
+testData$x = data.frame(testData$x)
+```
+
+### Tune several model on this data
+
+```{r}
+model.eval = function(modelmethod, gridSearch = NULL)
+{
+  Model = train(x = trainingData$x, y = trainingData$y, method = modelmethod, tuneGrid = gridSearch, preProcess = c('center', 'scale'), trControl = trainControl(method='cv'))
+  Pred = predict(Model, newdata = testData$x)
+  modelperf = postResample(Pred, testData$y)
+  print(modelperf)
+}
+
+```
+
+
+### 1] K-Nearest Neighbors - 
+
+```{r}
+perfknn = model.eval('knn')
+```
+
+### 2] Neural Net - 
+
+```{r}
+nnetGrid = expand.grid(decay = c(0,0.01, .1), size = c(1:10))
+perfnn = model.eval('nnet', nnetGrid)
+```
+
+### 3] Support Vector Machine - 
+
+```{r}
+perfsvm = model.eval('svmRadial')
+```
+
+### 4] Multivariate Adaptive Regression Splines - 
+
+```{r}
+marsGrid = expand.grid(degree = 1:2, nprune = 2:38)
+perfmars = model.eval('earth', marsGrid)
+```
+
+```{r}
+df.perf = rbind(data.frame(Name = 'KNN', RMSE = perfknn[1]), data.frame(Name= 'NN', RMSE = perfnn[1]) , data.frame(Name = 'SVM', RMSE = perfsvm[1]), data.frame(Name = 'MARS', RMSE = perfmars[1]))
+
+ggplot() +
+  geom_bar(data = df.perf, aes(x = Name, y = RMSE, fill=Name), stat="identity")
+```
+
+### Which models appear to give the best performance?
+
+#### From the above bar chart we can see that MARS model gives us best RMSE on test set
+
+### Does MARS select informative predictors (those named X1-X5)
+
+```{r}
+marsGrid = expand.grid(degree = 1:2, nprune = 2:38)
+MARSModel = train(x = trainingData$x, y = trainingData$y, method = 'earth', tuneGrid = marsGrid, preProcess = c('center', 'scale'), trControl = trainControl(method='cv'))
+varImp(MARSModel)
+```
+
+#### From the above variable importance table we can see that MARS model is selecting informative predictors (those named X1-X5)
+
+## 7.5
+
+### Prepare Data
+
+```{r}
+library(AppliedPredictiveModeling)
+data(ChemicalManufacturingProcess)
+tmp.data <- mice(ChemicalManufacturingProcess,m=2,maxit=5,meth='pmm',seed=500)
+ChemicalManufacturingProcess = complete(tmp.data)
+
+# train test split
+set.seed(100)
+rows = nrow(ChemicalManufacturingProcess)
+t.index <- sample(1:rows, size = round(0.75*rows), replace=FALSE)
+df.train <- ChemicalManufacturingProcess[t.index ,]
+df.test <- ChemicalManufacturingProcess[-t.index ,]
+df.train.x = df.train[,-1]
+df.train.y = df.train[,1]
+df.test.x = df.test[,-1]
+df.test.y = df.test[,1]
+```
+
+```{r}
+model.eval = function(modelmethod, gridSearch = NULL)
+{
+  Model = train(x = df.train.x, y = df.train.y, method = modelmethod, tuneGrid = gridSearch, preProcess = c('center', 'scale'), trControl = trainControl(method='cv'))
+  Pred = predict(Model, newdata = df.test.x)
+  modelperf = postResample(Pred, df.test.y)
+  print(modelperf)
+}
+
+```
+
+### 1] K-Nearest Neighbors - 
+
+```{r}
+perfknn = model.eval('knn')
+```
+
+### 2] Neural Net - 
+
+```{r}
+nnetGrid = expand.grid(decay = c(0,0.01, .1), size = c(1:10))
+perfnn = model.eval('nnet', nnetGrid)
+```
+
+### 3] Support Vector Machine - 
+
+```{r}
+perfsvm = model.eval('svmRadial')
+```
+
+### 4] Multivariate Adaptive Regression Splines - 
+
+```{r}
+marsGrid = expand.grid(degree = 1:2, nprune = 2:38)
+perfmars = model.eval('earth', marsGrid)
+```
+
+```{r}
+df.perf = rbind(data.frame(Name = 'KNN', RMSE = perfknn[1]), data.frame(Name= 'NN', RMSE = perfnn[1]) , data.frame(Name = 'SVM', RMSE = perfsvm[1]), data.frame(Name = 'MARS', RMSE = perfmars[1]))
+
+ggplot(data = df.perf, aes(x = Name, y = RMSE, fill=Name)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  geom_text(aes(label=RMSE), vjust=1, color="white",
+            position = position_dodge(0.9), size=3.5)
+```
+
+### a. Which nonlinear regression model gives the optimal resampling and test set performance?
+
+#### From the above bar plot we can see that second degree MARS model gives us optimal resampling and test set performance
+
+### b. Which predictors are most important in the optimal nonlinear regression model? Do either the biological or process variables dominate the list? How do the top ten important predictors compare to the top ten predictors from the optimal linear model?
+
+```{r}
+marsGrid = expand.grid(degree = 1:2, nprune = 2:38)
+MARSModel = train(x = df.train.x, y = df.train.y, method = 'earth', tuneGrid = marsGrid, preProcess = c('center', 'scale'), trControl = trainControl(method='cv'))
+print(varImp(MARSModel))
+```
+
+#### From the above list of top 20 important variables we can see that manufacturing process variables dominate the important variable list.
+
+```{r}
+summary(MARSModel)
+```
+
+#### From the MARS model summary we can see that top 10 important predictor are different than top ten predictor of the optimum linear model
+
+### c. Explore the relationships between the top predictors and the response for the predictors that are unique to the optimal nonlinear regression model. Do these plots reveal intuition about the biological or process predictors and their relationship with yield?
+
+#### Plot correltion matrix of data
+
+```{r echo=FALSE}
+library(magrittr)  
+library(corrplot)
+library(PerformanceAnalytics)
+df.train %>% dplyr::select(BiologicalMaterial10, ManufacturingProcess17, ManufacturingProcess32, ManufacturingProcess05, BiologicalMaterial02, ManufacturingProcess09, BiologicalMaterial06, ManufacturingProcess06, ManufacturingProcess13, ManufacturingProcess42) %>%
+  chart.Correlation(histogram=TRUE, pch=19, method = 'pearson')
+  
+```
+
+#### From the above correlation graph between top 10 important predictors and outcome variable (Yield) We can see that there exist a non linear relationship between important predictors and outcome variable. No wonder second degree MARS model is proving to be optimal model for this dataset
