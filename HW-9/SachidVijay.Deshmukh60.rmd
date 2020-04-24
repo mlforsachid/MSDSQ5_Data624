@@ -1,0 +1,281 @@
+---
+title: "Data-624 Homework-9"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## ---------------------------------------------------------------------------
+### **Student Name :** Sachid Deshmukh
+### **Date :** 04/26/2020
+
+* > [RPubs location of published file](http://rpubs.com/sachid/Data624-Homework9)
+
+## ---------------------------------------------------------------------------
+
+```{r include=FALSE}
+library(mlbench)
+library(ggplot2)
+library(mice)
+library(caret)
+library(Cubist)
+library(gbm)
+library(ipred)
+library(party)
+library(partykit)
+library(randomForest)
+library(rpart)
+library(vip)
+
+```
+
+## 8.1 Recreate the simulated data from Exercise 7.2
+
+### Load data
+
+
+```{r}
+library(mlbench)
+set.seed(200)
+simulated <- mlbench.friedman1(200, sd = 1)
+simulated <- cbind(simulated$x, simulated$y)
+simulated <- as.data.frame(simulated)
+colnames(simulated)[ncol(simulated)] <- "y"
+```
+
+### a. Fit a random forest model to all of the predictors, then estimate the variable importance scores:
+
+```{r}
+model1 <- randomForest(y ~ ., data = simulated,
+                       importance = TRUE,
+                       ntree = 1000)
+rfImp1 <- model1$importance #varImp(model1, scale = FALSE)
+vip(model1, color = 'red', fill='green') + 
+  ggtitle('Model1 Var Imp')
+
+```
+
+### Did the random forest model significantly use the uninformative predictors ( V6 – V10 )?
+
+#### From the above variable importance chart we can see that random forest model didn't significantly use the uninformative predictors ( V6 – V10 )
+
+### b. Now add an additional predictor that is highly correlated with one of the informative predictors. For example:
+
+```{r}
+simulated$duplicate1 <- simulated$V1 + rnorm(200) * .1
+cor(simulated$duplicate1, simulated$V1)
+```
+
+### Fit another random forest model to these data. Did the importance score for V1 change? What happens when you add another predictor that is also highly correlated with V1
+
+```{r}
+model2 <- randomForest(y ~ ., data = simulated, 
+                       importance = TRUE, 
+                       ntree = 1000)
+rfImp2 <- varImp(model2, scale = FALSE)
+grid.arrange(vip(model1, color = 'red', fill='green') + 
+  ggtitle('Model1 Var Imp'), vip(model2, color = 'green', fill='red') + 
+  ggtitle('Model2 Var Imp'), ncol = 2)
+```
+
+#### We can see the addition of highly correlated valriable changes the overall variable importanc of the model. Importance score of V1 changed. We can see the original importance score of variable V1 is decreased by half due to addition of highly correlated variable. If we have highly correlated variables in the model input, variable importance score will be misleading
+
+### c. Use the cforest function in the party package to fit a random forest model using conditional inference trees. The party package function varimp can calculate predictor importance. The conditional argument of that function toggles between the traditional importance measure and the modified version described in Strobl et al. (2007). Do these importances show the same pattern as the traditional random forest model?
+
+```{r}
+model3 <- cforest(y ~ ., data = simulated, ntree = 100)
+
+# Conditional variable importance
+cfImp3 <- varimp(model3, conditional = TRUE)
+# Un-conditional variable importance
+cfImp4 <- varimp(model3, conditional = FALSE)
+old.par <- par(mfrow=c(1, 2))
+barplot(sort(cfImp3),horiz = TRUE, main = 'Conditional', col = rainbow(3))
+barplot(sort(cfImp4),horiz = TRUE, main = 'Un-Conditional', col = rainbow(5))
+par(old.par)
+
+```
+#### We can see that when variable importance is calculated conditionally, it takes into account correlation between variable V1 and duplicate1. It adjust importance score of these two variables accordingly. When variable importance is calculated un-conditionally then it treats both highly correlated variables (V1 and duplicate1) with equal importance which can be misleading.
+
+### d. Repeat this process with different tree models, such as boosted trees and Cubist. Does the same pattern occur?
+
+#### 1] Cubist
+
+```{r}
+model4 <- cubist(x = simulated[, names(simulated)[names(simulated) != 'y']], 
+                 y = simulated[,c('y')])
+
+
+# Conditional variable importance
+cfImp4 <- varImp(model4, conditional = TRUE)
+# Un-conditional variable importance
+cfImp5 <- varImp(model4, conditional = FALSE)
+old.par <- par(mfrow=c(1, 2))
+barplot((t(cfImp4)),horiz = TRUE, main = 'Conditional', col = rainbow(3))
+barplot((t(cfImp5)),horiz = TRUE, main = 'Un-Conditional', col = rainbow(5))
+par(old.par)
+
+```
+
+#### 2] Boosted Trees
+
+```{r}
+gbmGrid = expand.grid(interaction.depth = seq(1,5, by=2), n.trees = seq(100, 1000, by = 100), shrinkage = 0.1, n.minobsinnode = 5)
+model4 <- train(y ~ ., data = simulated, tuneGrid = gbmGrid, verbose = FALSE, method = 'gbm' )
+
+
+# Conditional variable importance
+cfImp4 <- varImp(model4, conditional = TRUE)
+# Un-conditional variable importance
+cfImp5 <- varImp(model4, conditional = FALSE)
+old.par <- par(mfrow=c(1, 2))
+barplot((t(cfImp4$importance)),horiz = TRUE, main = 'Conditional', col = rainbow(3))
+barplot((t(cfImp5$importance)),horiz = TRUE, main = 'Un-Conditional', col = rainbow(5))
+par(old.par)
+
+```
+
+#### We can see that conditional and un-conditional variable importance is same for Cubist and Boosted Trees algorithms.
+
+## 8.2 Use a simulation to show tree bias with different granularities.
+
+#### Let's create a simulated dataset there output variable Y is combination of two input variable V1 and V2. V1 has high number distinct values (2-500) compared to V2 (2-10)
+
+```{r}
+V1 <- runif(1000, 2,500)
+V2 <- rnorm(1000, 2,10)
+V3 <- rnorm(1000, 1,1000)
+y <- V2 + V1 
+
+df <- data.frame(V1, V2, V3, y)
+model3 <- cforest(y ~ ., data = df, ntree = 10)
+
+cfImp4 <- varimp(model3, conditional = FALSE)
+barplot(sort(cfImp4),horiz = TRUE, main = 'Un-Conditional', col = rainbow(5))
+
+```
+
+#### We can see that Random Forest algorithm gives high score to variable V1 whihc has more number of distinct values
+
+#### Let's reverse the granularity of V1 and V2 variable respectively. Output variable y will remain unchanged. Let's fit the Random Forest tree and observe the variable importance
+
+```{r}
+V1 <- runif(1000, 2,10)
+V2 <- rnorm(1000, 2,500)
+V3 <- rnorm(1000, 1,1000)
+y <- V2 + V1 
+ 
+
+df <- data.frame(V1, V2, V3, y)
+model3 <- cforest(y ~ ., data = df, ntree = 10)
+
+cfImp4 <- varimp(model3, conditional = FALSE)
+barplot(sort(cfImp4),horiz = TRUE, main = 'Un-Conditional', col = rainbow(5))
+
+```
+
+#### We can see that Random forest algorithm now gives high score to V2 variable since it is more granular (high number of distinct values 2-500)
+
+## 8.3 In stochastic gradient boosting the bagging fraction and learning rate will govern the construction of the trees as they are guided by the gradient. Although the optimal values of these parameters should be obtained through the tuning process, it is helpful to understand how the magnitudes of these parameters affect magnitudes of variable importance. Figure 8.24 provides the variable importance plots for boosting using two extreme values for the bagging fraction (0.1 and 0.9) and the learning rate (0.1 and 0.9) for the solubility data. The left-hand plot has both parameters set to 0.1, and the right-hand plot has both set to 0.9
+
+### a. Why does the model on the right focus its importance on just the first few of predictors, whereas the model on the left spreads importance across more predictors?
+
+#### Model on right have high bagging fraction rate (0.9). This means more and more trees saw the same fraction of data and diversity in variable selction is reduced. It results in few predictors dominating the importance score compared to left model which has very granular bagging fraction (0.1). 
+### b. Which model do you think would be more predictive of other samples?
+
+#### Model with lower learning rate and bagging fraction should be more predictive on other sample. It has a balanced mix of selected important predictors rather than veyr few predictors with very high importance in the right hand side model. Right hand side model cna be over bias to the training data and can fail to generalize on test data due to its stong fiting on training dataset
+
+### c. How would increasing interaction depth affect the slope of predictor importance for either model in Fig. 8.24?
+
+#### As we increase the interaction depth, trees are allowed to grow more deep. This will result in more and more predictors to consider for tree splitting chioce. This will spread the variable importance to more variables rather than selecting very few predictors with very high importance
+
+## 8.7 Refer to Exercises 6.3 and 7.5 which describe a chemical manufacturing process. Use the same data imputation, data splitting, and pre-processing steps as before and train several tree-based models:
+
+### Prepare Data
+
+```{r}
+library(AppliedPredictiveModeling)
+data(ChemicalManufacturingProcess)
+tmp.data <- mice(ChemicalManufacturingProcess,m=2,maxit=5,meth='pmm',seed=500)
+ChemicalManufacturingProcess = complete(tmp.data)
+
+# train test split
+set.seed(100)
+rows = nrow(ChemicalManufacturingProcess)
+t.index <- sample(1:rows, size = round(0.75*rows), replace=FALSE)
+df.train <- ChemicalManufacturingProcess[t.index ,]
+df.test <- ChemicalManufacturingProcess[-t.index ,]
+df.train.x = df.train[,-1]
+df.train.y = df.train[,1]
+df.test.x = df.test[,-1]
+df.test.y = df.test[,1]
+```
+
+```{r}
+model.eval = function(modelmethod, gridSearch = NULL)
+{
+  Model = train(x = df.train.x, y = df.train.y, method = modelmethod, tuneGrid = gridSearch, preProcess = c('center', 'scale'), trControl = trainControl(method='cv'))
+  Pred = predict(Model, newdata = df.test.x)
+  modelperf = postResample(Pred, df.test.y)
+  print(modelperf)
+}
+
+```
+### a. Which tree-based regression model gives the optimal resampling and test set performance?
+
+#### 1. Simple Tree
+
+```{r}
+perftree = model.eval('rpart')
+```
+
+#### 2. Random Forest
+
+```{r}
+perfrf = model.eval('rf')
+```
+
+#### 3. Boosting Trees
+
+```{r}
+perfgbm = model.eval('gbm')
+```
+
+#### 4. Cubist
+
+```{r}
+perfcubist = model.eval('cubist')
+```
+
+```{r}
+df.perf = rbind(data.frame(Name = 'SimpleTree', RMSE = perftree[1]), data.frame(Name= 'RandomForest', RMSE = perfrf[1]) , data.frame(Name = 'BoostingTree', RMSE = perfgbm[1]), data.frame(Name = 'Cubist', RMSE = perfcubist[1]))
+
+ggplot(data = df.perf, aes(x = Name, y = RMSE, fill=Name)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  geom_text(aes(label=RMSE), vjust=1, color="white",
+            position = position_dodge(0.9), size=3.5)
+```
+
+#### From the above model performance chart, we can see the Cubist model gives the lowest RMSE on test set. Cubist is the most optimal model for this dataset
+
+### b. Which predictors are most important in the optimal tree-based regression model? Do either the biological or process variables dominate the list? How do the top 10 important predictors compare to the top 10 predictors from the optimal linear and nonlinear models?
+
+```{r}
+cModel <- train(x = df.train.x,
+                     y = df.train.y,
+                     method = 'cubist')
+vip(cModel, color = 'red', fill='purple')
+```
+
+#### We can see that manufacturing process variables dominate the list of important variables which is in parity with optimal list of variables from linear and non-linear models
+
+### c. Plot the optimal single tree with the distribution of yield in the terminal nodes. Does this view of the data provide additional knowledge about the biological or process predictors and their relationship with yield?
+
+```{r}
+library(rpart.plot)
+multi.class.model  = rpart(Yield~., data=df.train)
+rpart.plot(multi.class.model)
+```
+
+#### From the above tree plot, we can clearly see that high values of manufacturing process vairaibles contributes to higher Yield
